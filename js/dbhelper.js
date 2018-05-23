@@ -1,6 +1,7 @@
 /**
  * Common database helper functions.
  */
+
 class DBHelper {
 
   /**
@@ -11,24 +12,63 @@ class DBHelper {
     const port = 1337 // Change this to your server port
     return `http://localhost:${port}/restaurants`;
   }
-
+  
   /**
    * Fetch all restaurants.
    */
   static fetchRestaurants(callback) {
-    let xhr = new XMLHttpRequest();
-    xhr.open('GET', DBHelper.DATABASE_URL);
-    xhr.onload = () => {
+    if (!('indexedDB' in window)) {
+      console.log('IndexedDB is not supported on this browser');
+      let xhr = new XMLHttpRequest();
+      xhr.open('GET', DBHelper.DATABASE_URL);
+      xhr.onload = () => {
       if (xhr.status === 200) { // Got a success response from server!
-        const json = JSON.parse(xhr.responseText);
-        const restaurants = json;
-        callback(null, restaurants);
-      } else { // Oops!. Got an error from server.
-        const error = (`Request failed. Returned status of ${xhr.status}`);
-        callback(error, null);
-      }
-    };
-    xhr.send();
+          const json = JSON.parse(xhr.responseText);
+          const restaurants = json;
+          callback(null, restaurants);
+        } else { // Oops!. Got an error from server.
+          const error = (`Request failed. Returned status of ${xhr.status}`);
+          callback(error, null);
+        }
+      };
+      xhr.send();
+      return;
+    }
+    idb.open('restaurants', 1, function(upgradeDb){
+      upgradeDb.createObjectStore('restaurants',{keyPath:'id'});
+      }).then(function(db){
+        var tx = db.transaction('restaurants', 'readonly');
+        var dbStore = tx.objectStore('restaurants');
+        dbStore.getAll().then(idbData => {
+          if(idbData && idbData.length > 0) {
+            // JSON data are already present in IDB
+            callback(null, idbData);
+          } else {
+            // put JSON data in the DB
+            let xhr = new XMLHttpRequest();
+            xhr.open('GET', DBHelper.DATABASE_URL);
+            xhr.onload = () => {
+              if (xhr.status === 200) { // Got a success response from server!
+                var tx = db.transaction('restaurants', 'readwrite');
+                var dbStore = tx.objectStore('restaurants');
+                const json = JSON.parse(xhr.responseText);
+                json.forEach(element => {
+                  // Put every restaurant of the JSON in the IDB
+                  dbStore.put(element);
+                });
+                dbStore.getAll().then(restaurants => {
+                  // Get the restaurants from the IDB now
+                  callback(null, restaurants);
+                })
+              } else { // Oops!. Got an error from server.
+                const error = (`Request failed. Returned status of ${xhr.status}`);
+                callback(error, null);
+              }
+            };
+            xhr.send();
+          }
+        });
+      });
   }
 
   /**

@@ -6,6 +6,6 @@
  */
 
 module.exports = {
-	
+    const : () => console.log('ciao'),	
 };
 
